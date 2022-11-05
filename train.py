@@ -112,3 +112,38 @@ with torch.no_grad():
 
 X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
 torchvision.utils.save_image(X0_clip, "fast.png")
+
+## Faster sample, every 10th step
+tau = list(range(0,n_times+1,10))
+alpha_tau = alpha[tau]
+n_tau = len(tau) - 1
+with torch.no_grad():
+    Xt = XT
+    for i in range(n_tau, 0, -1):
+        t = tau[i]
+        print(t)
+        t_tensor = torch.full((Xt.shape[0],), t, device=device)
+        eps = model(Xt, t_tensor)
+        Xt = (alpha_tau[i-1]/alpha_tau[i]).sqrt() * (Xt - (1-alpha_tau[i]).sqrt() * eps) + (1-alpha_tau[i-1]).sqrt() * eps
+
+
+X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
+torchvision.utils.save_image(X0_clip, "faster.png")
+
+
+## Fastest sample, every 100th step
+tau = list(range(0,n_times+1,100))
+alpha_tau = alpha[tau]
+n_tau = len(tau) - 1
+with torch.no_grad():
+    Xt = XT
+    for i in range(n_tau, 0, -1):
+        t = tau[i]
+        print(t)
+        t_tensor = torch.full((Xt.shape[0],), t, device=device)
+        eps = model(Xt, t_tensor)
+        Xt = (alpha_tau[i-1]/alpha_tau[i]).sqrt() * (Xt - (1-alpha_tau[i]).sqrt() * eps) + (1-alpha_tau[i-1]).sqrt() * eps
+
+
+X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
+torchvision.utils.save_image(X0_clip, "fastest.png")
