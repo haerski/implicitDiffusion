@@ -28,13 +28,13 @@ else:
 print(f'Using {device}')
 
 # Load dataset
-dataset = torchvision.datasets.CIFAR10(root = ".",
+dataset = torchvision.datasets.MNIST(root = ".",
                                     download = True,
                                     transform = transforms.Compose([
-                                        transforms.RandomHorizontalFlip(),
+                                        # transforms.RandomHorizontalFlip(),
                                         transforms.ToTensor()]))
 dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=300,
+                                        batch_size=500,
                                         shuffle=True,
                                         num_workers=4)
 
@@ -44,13 +44,13 @@ plt.savefig("bar.png")
 
 
 # Load and configure model
-model = Model(resolution=32,
-                in_channels=3,
-                out_ch=3,
+model = Model(resolution=28,
+                in_channels=1,
+                out_ch=1,
                 ch=128,
-                ch_mult=(1,2,2,2),
+                ch_mult=(1,2,2),
                 num_res_blocks=2,
-                attn_resolutions=(16,),
+                attn_resolutions=(14,),
                 dropout=0.1).to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr = 0.0002)
@@ -78,14 +78,13 @@ while True:
     torch.save(chkpt, "checkpoint.pt")
 chkpt = deepcopy(model.state_dict())
 torch.save(chkpt, "checkpoint.pt")
-model.load_state_dict(torch.load("model-790000.ckpt"))
 model.load_state_dict(torch.load("checkpoint.pt"))
 
 
 
 model.eval()
 ## Normal sample
-XT = torch.randn((64,3,32,32), device=device)
+XT = torch.randn((64,1,28,28), device=device)
 with torch.no_grad():
     Xt = XT
     for t in range(n_times,0,-1):
