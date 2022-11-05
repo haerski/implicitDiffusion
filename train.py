@@ -84,20 +84,32 @@ model.load_state_dict(torch.load("checkpoint.pt"))
 
 
 model.eval()
+## Normal sample
+XT = torch.randn((64,3,32,32), device=device)
 with torch.no_grad():
-    ## Sample
-    XT = torch.randn((64,3,32,32), device=device)
+    Xt = XT
     for t in range(n_times,0,-1):
         print(t)
-        t_tensor = torch.full((XT.shape[0],), t, device=device)
-        eps = model(XT, t_tensor)
-        XT = (alpha[t-1]/alpha[t]).sqrt() * (XT - (1-alpha[t]).sqrt() * eps) + (1-alpha[t-1]).sqrt() * eps
-        # plt.imshow(TF.to_pil_image(torchvision.utils.make_grid(XT)))
-        # plt.pause(0.001)
+        t_tensor = torch.full((Xt.shape[0],), t, device=device)
+        eps = model(Xt, t_tensor)
+        Xt = (alpha[t-1]/alpha[t]).sqrt() * (Xt - (1-alpha[t]).sqrt() * eps) + (1-alpha[t-1]).sqrt() * eps
 
-# clip
-XT_clip = (torch.clip(XT, -1., 1.) + 1.) / 2.
+X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
+torchvision.utils.save_image(X0_clip, "slow.png")
 
-for i, X in enumerate(XT_clip.cpu()):
-    print(i)
-    torchvision.utils.save_image(X, f'img/{i}.png')    
+## Fast sample, every 5th step
+tau = list(range(0,n_times+1,5))
+alpha_tau = alpha[tau]
+n_tau = len(tau) - 1
+with torch.no_grad():
+    Xt = XT
+    for i in range(n_tau, 0, -1):
+        t = tau[i]
+        print(t)
+        t_tensor = torch.full((Xt.shape[0],), t, device=device)
+        eps = model(Xt, t_tensor)
+        Xt = (alpha_tau[i-1]/alpha_tau[i]).sqrt() * (Xt - (1-alpha_tau[i]).sqrt() * eps) + (1-alpha_tau[i-1]).sqrt() * eps
+
+
+X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
+torchvision.utils.save_image(X0_clip, "fast.png")
