@@ -43,7 +43,7 @@ alpha = torch.cat([torch.tensor([1.]), torch.cumprod(1.-beta,0)]).to(device)
 model.load_state_dict(torch.load("mnist_weights.pt", map_location=device))
 
 ## Sample every 100th step
-tau = list(range(0,T+1,100))
+tau = list(range(0,T+1,50))
 alpha_tau = alpha[tau]
 n_tau = len(tau) - 1
 XT = torch.randn((64,1,28,28), device=device)
@@ -58,4 +58,4 @@ with torch.no_grad():
 
 
 X0_clip = (torch.clip(Xt, -1., 1.) + 1.) / 2.
-torchvision.utils.save_image(X0_clip, "mnist.png")
+torchvision.utils.save_image(X0_clip, "assets/mnist.png")

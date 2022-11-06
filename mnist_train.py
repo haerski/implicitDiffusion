@@ -52,7 +52,7 @@ T = 1000
 beta = torch.linspace(0.0001, 0.02, T) # same beta as in DDPM
 alpha = torch.cat([torch.tensor([1.]), torch.cumprod(1.-beta,0)]).to(device)
 
-epochs = 15
+epochs = 30
 ## Train
 model.train()
 for epoch in range(epochs):
