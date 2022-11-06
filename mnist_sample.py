@@ -41,6 +41,7 @@ alpha = torch.cat([torch.tensor([1.]), torch.cumprod(1.-beta,0)]).to(device)
 
 # Load weights
 model.load_state_dict(torch.load("mnist_weights.pt", map_location=device))
+model.eval()
 
 ## Sample every 100th step
 tau = list(range(0,T+1,50))

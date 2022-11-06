@@ -43,6 +43,7 @@ alpha = torch.cat([torch.tensor([1.]), torch.cumprod(1.-beta,0)]).to(device)
 # model.load_state_dict(torch.load("cifar_weights.pt", map_location=device))
 # Use weights from https://heibox.uni-heidelberg.de/d/01207c3f6b8441779abf/
 model.load_state_dict(torch.load("cifar-790000_weights.ckpt", map_location=device))
+model.eval()
 
 ## Sample every 100th step
 tau = list(range(0,T+1,100))
