@@ -245,7 +245,7 @@ plt.imshow(TF.to_pil_image(torchvision.utils.make_grid(X0_clip)))
 ```
 
     
-![png](notebook_files/notebook_32_1.png)
+![png](assets/notebook_32_1.png)
     
 
 
@@ -272,7 +272,7 @@ plt.imshow(TF.to_pil_image(torchvision.utils.make_grid(X0_clip)))
 
 
     
-![png](notebook_files/notebook_34_2.png)
+![png](assets/notebook_34_2.png)
     
 
 
