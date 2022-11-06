@@ -33,7 +33,7 @@ where $\epsilon_t \sim \mathcal{N}(0,I)$ is a standard Gaussian random variable,
 
 The reason for the choice of $\alpha_t$ is now clear.
 Suppose $t$ is small, so $\alpha_t$ is close to $1$. Then $\sqrt{\alpha_t}$ is close to 1, and $\sqrt{1-\alpha_t}$ is close to zero, to the image $x_t$ is mostly the original image $x_0$, with noise close to zero.
-On the opposite side, if $t$ is large, then $\alpha_t$ is close to $0$, so $\sqrt{\alpha_t} \approx 0$, and $\sqrt{1-\alpha_t} \approx 1$. This means that for large $t$, $x_t$ is mostly noise, with an almost-zero influence from $x_0$.
+On the opposite side, if $t$ is large, then $\alpha_t$ is close to $0$, so $\sqrt{\alpha_t} \approx 0$, and $\sqrt{1-\alpha_t} \approx 1$. This means that for large $t$, $x_t$ is mostly noise, with an almost-zero influence from $x_0$. Note that it is important that the influence of $x_t$ is **almost** zero, but not too close to zero either, because we want some signal from $x_0$ to show up in $x_T$. If $\alpha_T$ is too close to zero, we will only learn random noise, and be unable to reverse the noising process.
 
 We fix an adequate set of parameters $\alpha_t$. The original DDIM paper provides an emipirically reasonable choice, which is described in the implementation section below.
 
