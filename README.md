@@ -66,6 +66,8 @@ The training procedure is as follows:
 
 We repeat the above steps until the parameters stabilize.
 
+It may at first seem impossible, or even paradoxical, to train a machine to predict noise. The following human analogy might shed some light in what the model is doing. Suppose a human sees the image $x_t = $ ![Noisy 1](assets/noisy.png). Due to our extensive experience with numbers, we can guess that this is probably an image of the number 1, with some pixel values flipped. We might even be able to decompose the image as $\epsilon_t = $ ![Noise](assets/noise.png) and $x_0 = $ ![denoise](assets/denoise.png). Thus in this toy example, a human could guess what the noise looks like, even though it was chosen randomly.
+
 ### Generating samples
 
 We now have all ingredients necessary to reverse the noising procedure.
