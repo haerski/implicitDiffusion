@@ -121,6 +121,169 @@ We then use the same starting noise and skip some steps to obtain the images bel
 
 We observe that the sample quality is barely affected, even when skipping 100 steps at a time. Careful inspection will reveal some artifacts, for example the number 9 on the top right looks more like an 8.
 
+## Mathematical details
+
+In this section we give the statistical details and motivation behind DDIM. As mentioned above, the DDIM paper describes a family of models; here we focus on the implicit model. Since in the implicit setting many operations become deterministic, we introduce Dirac delta probability measures as a probability density on a deterministic event.
+
+Our goal is to model the "true" probability distribution $q(x_0)$ on the space of images. Drawing a random sample from this distribution means sampling a random image. We view our training data as a set of random samples from this distribution.
+
+Of course, there is no hope of ever writing down any equations for $q(x_0)$, as the distribution is very complex. Instead, we will attempt to *model* this distribution via another one called $ p_\theta(x_0) $, where the subscript $\theta$ indicates a set of model parameters.  In our informal discussion above, the set of parameters $\theta$ is the set of weights in the neural network. Sampling $p_\theta(x_0)$ means generating random images, as we have done in the previous section. In order to model a distribution that generates similar samples to our training images, we will attempt to find parameters $\theta$ that maximizes the expected (log)-likelihood under the true data distribution $q(x_0)$.
+
+Our strategy will go roughly as follows:
+1. For each data point $x_0$, we describe a scheme to generate *latent* variables $x_1,\dotsc,x_T$, which gives us a joint distribution $q(x_0,x_1,\dotsc,x_T)$. This can be thought of as an *encoder*. Furthermore, this procedure is fixed; no parameters are learned.
+2. We then define a procedure $p_\theta(x_{t-1} \mid x_t)$ for inferring the previous latent variable from the next one, and a simple distribution $p(x_T)$ to start the backwards process. We will define the joint distribution $p(x_0, \dotsc, x_T)$ so that the sequence $x_T,\dotsc,x_0$ is obtained by first sampling $x_T$, and then sampling each $p(x_{t-1} \mid x_t)$.
+3. Given an image $x_0$, we aim to maximize the likelihood $p_\theta(x_0)$ by marginalizing over the latent variables. This will be intractable, but we can derive a lower bound. We will see that maximizing this lower bound will end up minimizing the "distance" between the forward and backward processes. Since the forward procedure is fixed, we use this to motivate our choices of $p_\theta(x_{t-1} \mid x_t)$.
+
+### Evidence lower bound
+
+We will study the DDIM model in a reversed order compared to the above list. We start by describing the desired lower bound for the log-likelihood. Next, we will describe the reverse distribution $p_\theta(x_0,\dotsc,x_T)$ that aims to approximate $q(x_0,\dotsc,x_T)$. This will be chosen to maximize the lower bound of the log-likelihood. Finally, we describe the forward procedure $q(x_0,\dotsc,x_T)$ in a way that is compatible with DDPM.
+
+Suppose $x_0$ is sampled from the data distribution $q(x_0)$. We want to maximize the likelihood $p_\theta(x_0) = \int p_\theta(x_0,x_1,\dotsc,x_T) d(x_1,\dotsc,x_T)$. This is in general intractable, as $p_\theta$ usually depends on $\theta$ in complicated, highly nonlinear ways, via outputs of a neural network. Instead of directly maximizing the likelihood, we will maximize a lower bound.
+
+We will outline the main steps of the derivation.
+$$
+\begin{align}
+\log p_\theta(x_0) &= \log p_\theta(x_0) \int q(x_1,\dotsc,x_T \mid x_0) \, d(x_1,\dotsc,x_T)\\
+&= E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log p_\theta(x_0) \right] \\
+&= E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p_\theta(x_0,\dotsc,x_T) q(x_1,\dotsc,x_T \mid x_0)}{p_\theta(x_1,\dotsc,x_T \mid x_0) q(x_1,\dotsc,x_T \mid x_0)} \right] \\
+&= E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p_\theta(x_0,\dotsc,x_T)}{q(x_1,\dotsc,x_T \mid x_0)} \right] + D_{KL}(q(x_1,\dotsc,x_T \mid x_0)\,||\, p_\theta(x_1,\dotsc,x_T \mid x_0)
+\end{align}
+$$
+Here $D_{KL}$ is the Kullback-Leibler divergence, which describes the "distance" between a pair of distribuitions. Since it is always positive, we get a lower bound for the log-likelihood. We will also use our definitions for joint and conditional distributions
+$$
+\begin{align}
+\log p_\theta(x) &\geq E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p_\theta(x_0,\dotsc,x_T)}{q(x_1,\dotsc,x_T \mid x_0)} \right]
+\end{align}
+$$
+Inspired by the DDPM paper, we would like our distributions to factor as follows.
+For the denoising procedure, we would like to sample from $p(x_T)$, and then sample from $p_\theta(x_{t-1} \mid x_t)$ to iteratively obtain the entire sequence $x_T, \dotsc, x_0$. In symbols, this means we want a joint distribution of the form
+$$
+p_\theta(x_0,\dotsc,x_T) = p(x_T) \prod_{t=1}^T p_\theta(x_{t-1} \mid x_t)
+$$
+We then define the method for generating the latents given $x_0$. We first sample $x_T$ from $q(x_T \mid x_0)$, and then work backwards, sampling $x_{t-1}$ from $q(x_{t-1} \mid x_t, x_0)$. We will want to choose these distributions so that the marginals $q(x_t \mid x_0)$ match the marginals in DDPM. Thus, while it may look like we're defining some kind of backward process, we are indeed generating a sequence $x_0, \dotsc, x_T$ of more and more noisy images. The **Forward process** section will provide details. This description corresponds to the following factored joint probability
+$$
+q(x_1,\dotsc,x_T \mid x_0) = q(x_T \mid x_0) \prod_{t=2}^T q(x_{t-1} \mid x_t, x_0).
+$$
+
+
+With these definitions in mind, we can continue deriving a lower bound
+$$
+\begin{align}
+\log p(x) &\geq E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p(x_T)\prod_{t=1}^T p_\theta(x_{t-1} \mid x_t)}{q(x_T \mid x_0) \prod_{t=2}^T q(x_{t-1} \mid x_0, x_t)} \right] \\
+&= E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p(x_T)}{q(x_T \mid x_0)} \right] + E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log p_\theta(x_0 \mid x_1) \right] + \sum_{t=2}^T E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p_\theta(x_{t-1} \mid x_t)}{q(x_{t-1} \mid x_t, x_0)} \right] \\
+&= -D_{KL} (q(x_T \mid x_0) || p(x_T))  + E_{q(x_1 \mid x_0)} \left[ \log p_\theta(x_0 \mid x_1) \right] - \sum_{t=2}^T E_{q(x_t \mid x_0)} \left[ D_{KL} (q(x_{t-1} \mid x_t, x_0) || p_\theta(x_{t-1} \mid x_t)) \right]
+\end{align}
+$$
+Note that the KL-divergence term appear with a negative sign, thus we want to minimize them to maximize the log-likelihood.
+We can interpret the three summands above.
+1. Minimizing the first KL-divergence means choosing a noising procedure that sends $x_T$ to a distribution close to $p(x_T)$. In practice, we will choose $p(x_T)$ to be a standard Gaussian, and $q(x_T \mid x_0)$ to be close to a standard Gaussian, so we can mostly ignore this term.
+2. The second term describes how well the last denoising step performs.
+3. The last KL-divergences measure how far our denoiser $p_\theta(x_{t-1} \mid x_{t})$ is from the "true" denoising distribution $q(x_{t-1} \mid x_t, x_0)$.
+
+### Model definition
+
+In the Denoinsing Diffusion **Implicit** Model, we describe $p_\theta(x_0)$ as an **implicit** model. This means that our model starts from an auxiliary, easy-to-understand distribution $p(x_T)$, and a **deterministic** procedure to got from a sample $x_T$ to $x_0$. The resulting distribution on $x_0$ will be called $p_\theta(x_0)$. Note that we never have access to $p_\theta(x_0)$ directly, but we are able to sample from it by following the denoising procedure.
+
+Since we will be describing deterministic transformations using probability densities, we need to introduce *Dirac delta* probability measures. One should think of Dirac delta measures as limit of Gaussians whose variance approaches 0. If the density function of a Gaussian is a bell curve, reducing the variance makes the bell skinnier and taller, until in the limit it is just an infinitely long spike, which integrates to 1 (as a probability measure should). For example, if $X \sim \mathcal{N}(0,1)$ and $Y = X+3$, we can say that the distribution of $Y$ conditioned on $X$ is a Dirac delta measure centered at $X+3$.
+
+Thus for our deterministic model, we will have all $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_t, x_0)$ be Dirac delta measures. Since we want to minimize the KL divergence between $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_t, x_0)$, we must choose their locations to be the same. In other words, the deterministic transformation induced by $p_\theta(x_{t-1} \mid x_t)$ to go from $x_t$ to $x_{t-1}$ should match the deterministic transformation induced by $q(x_{t-1} \mid x_t, x_0)$. Since the latter transformation depends on both $x_t$ and $x_0$, whereas the former transformation only has access to $x_t$, we will incorporate a model into $p_\theta(x_{t-1} \mid x_t)$ that attempts to predict $x_0$ from $x_t$. With this prediction in hand, we now have all the ingredients to define our sampling scheme. Next, we tackle the noising scheme.
+
+### Forward process
+
+In DDIM, the diffusion process is defined as
+$$
+q(x_1,\dotsc,x_T \mid x_0 ) = q(x_T \mid x_0) \prod_{t=2}^T q(x_{t-1} \mid x_0, x_t),
+$$
+where $q(x_T \mid x_0) = \mathcal{N}(\sqrt{\alpha_T} x_0, (1-\alpha_T)I)$, and $q(x_{t-1} \mid x_0, x_t)$ is a Dirac delta probability measure concentrated at the point
+$$
+x_{t-1} = \sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} x_0}{\sqrt{1-\alpha_t}}. \tag{3}
+$$
+
+With these definitions, we can interpret the latent variables (i.e. noised images) as being generated from $x_0$ by first randomly sampling $x_T$, and obtaining the other $x_{t-1},\dotsc,x_{1}$ deterministically from the above equation.
+
+At first glance this choice of forward distribution seems a bit arbitrary. The reason for this becomes apparent when we compute the marginals $q(x_t \mid x_0)$, as they indeed match the forward marginal distributions in DDPM. Conditioning on $x_0$, the fully noised image $x_{T-1}$ is
+$$
+x_{T-1} = \sqrt{\alpha_{T-1}} x_0 + \sqrt{1-\alpha_{T-1}}\frac{x_T - \sqrt{\alpha_T} x_0}{\sqrt{1-\alpha_T}},
+$$
+where $x_T \sim \mathcal{N}(\sqrt{\alpha_T} x_0, (1-\alpha_T)I)$. Thus, since $x_{T-1}$ is an affine transformation of the Gaussian $x_T$, it is also Gaussian, with mean $\sqrt{\alpha_{T-1}}x_0$ (obtained by setting $x_T = \sqrt{\alpha_{T-1}} x_0$), and variance $\frac{1-\alpha_{T-1}}{1-\alpha_T} \mathrm{Var}(x_T) = (1-\alpha_{T-1})I$.
+
+Repeating the above procedure recursively yields
+$$
+q(x_t \mid x_0) = \mathcal{N}(\sqrt{\alpha_t} x_0, (1-\alpha_t)I).
+$$
+We can thus interpret the $t$th latent variable as a combination $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$, where $\epsilon_t$ is a standard Gaussian. This represent the $t$th noisy image as a combination of the unnoised image $x_0$ and a noise term $\epsilon$, where the square roots ensure that the length scales stay the same throughout the noising process. The parameters $\alpha_t$ are chosen to be decreasing from 1 to almost 0, so that the noisiness of the sequence $x_0, x_1,\dotsc$ increases.
+
+The way the forward process is written looks a lot like a backwards process. A more "forward looking" process $q(x_t \mid x_0, x_{t-1})$ is easily computed by solving equation (3) for $x_t$. The distribution $q(x_t \mid x_0, x_{t-1})$ is a Dirac delta measure centered at
+$$
+x_t = \frac{\sqrt{1-\alpha_t}}{\sqrt{1-\alpha_{t-1}}}\left(x_{t-1} - \sqrt{\alpha_{t-1}}x_0 \right) + \sqrt{\alpha_t} x_0
+$$
+This form shows us that the noising procedure is *non-Markovian*, as $x_t$ is not independent of $x_0$ conditioned on $x_{t-1}$. This is in contrast to the DDPM model, where the noising procedure is defined to be a Markov process. Despite this, the marginals $q(x_t \mid x_0)$, and consequently the training objective, are exactly the same for both DDPM and DDIM.
+
+### Reversing the noising procedure
+
+Ideally, we would like to denoise by knowing the distribution $q(x_{t-1} \mid x_t)$. Unfortunately, this would require marginalizing over $x_0$, which in turn would require knowledge of the "true" image distribution $q(x_0)$. By using $p_\theta(x_0)$ as a proxy for $q(x_0)$, we saw that finding $\theta$ that maximizes the likelihood is equivalent to finding deterministic transitions $x_t \mapsto x_{t-1}$ that are as close as possible to the deterministic transitions given in equation (3). We deal with the lack of $x_0$ information by training a model $f_\theta(x_t)$ to learn $x_0$ from $x_t$.
+
+Then, the distributions $p_\theta(x_{t-1} \mid x_t)$ that maximize the log-likelihood are Dirac deltas centered at
+$$
+x_{t-1} = \sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}}.
+$$
+
+We note that if we have $x_0$ and $x_t$, we can also compute the noise used to generate $x_t$ from $x_0$ via the formula $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$. Thus, alternatively, we could train a model to learn $\epsilon_t$ from $x_t$ alone, which would be equivalent to training a model to learn $x_0$ from $x_t$ alone. If we let $\epsilon_\theta(x_t)$ be the prediction of $\epsilon_t$, we have a prediction for $x_0$ of the form
+$$
+f_\theta(x_t) = \frac{1}{\sqrt{\alpha_t}}(x_t - \sqrt{1-\alpha_t}\epsilon_\theta(x_t))
+$$
+Plugging this into the previous formula gives the location for the Dirac delta $p_\theta(x_{t-1} \mid x_t)$.
+Empirically it has been shown that predicting the noise $\epsilon_t$ results in better performance than predicting $x_0$. One reason may be that noise is more "normally" behaved than images.
+
+### Model training objective
+
+We now want to compute the lower bound for the log-likelihood. Since the first term is not trained (and is assumed to be close to zero either way), we will focus on the last two terms
+$$
+E_{q(x_1 \mid x_0)} \left[ \log p_\theta(x_0 \mid x_1) \right] - \sum_{t=2}^T E_{q(x_t \mid x_0)} \left[ D_{KL} (q(x_{t-1} \mid x_t, x_0) || p_\theta(x_{t-1} \mid x_t)) \right]. \tag{4}
+$$
+
+
+This is where we must part ways with Dirac delta probability densities for a moment, since the above values are not well defined. We will temporarily adopt the generalized version of the DDIM model, where the steps $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ are **Gaussian**, with nonzero variance $\sigma_t^2$ at each timestep. We recall that the Dirac deltas and the implicit model are recovered by letting $\sigma_t \to 0$ for all $t$.
+
+The main points still hold in this generalized setting. Most importantly, the KL divergence between $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ is minimized when $p_\theta(x_{t-1} \mid x_t)$ is a Gaussian, with "correct" mean
+$$
+E_{p_\theta(x_{t-1} \mid x_t)}[x_{t-1}] = \sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}}
+$$
+and variance $\sigma_t^2$. With this, because KL divergences between Gaussians are nice, we get a closed form formula for the expression in equation (4), namely
+$$
+-\sum_{t=1}^T \frac{1}{2\sigma_t^2} E_{q(x_0,x_t)}\left[ \|x_0 - f_\theta(x_t) \|_2^2 \right]
+$$
+Maximizing the quantity above means minimizing the difference between the real sample $x_0$ and our prediction $f_\theta(x_t)$. We also see why Dirac deltas fail here, as the above expression approaches infinity as $\sigma \to 0$, unless our model $f_\theta(x_t)$ is perfect.
+
+We can also plug in the relation $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$ to rewrite the above lower bound as
+$$
+-\sum_{t=1}^T \frac{1}{2d\sigma^2_t\alpha_t}E \left[\|\epsilon_t - \epsilon_\theta(x_t)\|_2^2 \right],
+$$
+where the expectation is taken over the distributions $x_0 \sim q(x_0), \epsilon_t \sim \mathcal{N}(0,I)$, and where $x_t = \sqrt{\alpha_t}x_0 + \sqrt{1-\alpha_t} \epsilon_t$, and $d$ is a constant. Similarly, maximizing this objective means minimizing the difference between the true noise $\epsilon_t$ and our prediction $\epsilon_\theta(x_t)$.
+
+The original DDPM paper suggests a simplified objective, of the form
+$$
+-\sum_{t=1}^T E \left[\|\epsilon_t - \epsilon_\theta(x_t)\|_2^2 \right],
+$$
+which just gets rid of the weights in front of the expectation. This has been empirically shown to produce samples of better quality. The lack of $\sigma_t$ in the simplified form means that we can use this objective function to train the implicit model as well.
+
+### Fast sampling
+
+The fast sampling method requires a slight redefinition of our forward and backward joint probability densities. Let $0 = \tau_0 < \tau_1 < \dotsb < \tau_S = T$. These will be the timesteps we visit in the denoising process. Then we define
+$$
+q(x_1,\dotsc,x_T | x_0) = q(x_T \mid x_0) \prod_{i = 2}^S q(x_{\tau_{i-1}} \mid x_0, x_{\tau_i}) \prod_{j \not \in \tau} q(x_j \mid x_0),
+$$
+where each distribution above is chosen to retain the "correct" marginals $q(x_t \mid x_0) = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$.
+
+Similarly, we have a modified reverse process
+$$
+p(x_0,\dotsc,x_T) = p(x_T) \prod_{i=1}^S p_\theta(x_{\tau_{i-1}} \mid x_{\tau_i}) \prod_{j \not \in \tau} p_\theta(x_0 \mid x_j)
+$$
+Thus samples are produced by generating $p(x_T)$, and going backwards to $x_0$ following transitions described by $p(x_{\tau_{i-1}} \mid x_{\tau_i})$.
+
+Similarly to the above, we can find a lower bound for the log-likelihood, which involves minimizing the KL-divergence between the $q(x_{\tau_{i-1}} \mid x_0, x_{\tau_i})$ and $p_\theta(x_{\tau_{i-1}} \mid x_{\tau_i})$. This is achieved when the transitions given by $p_\theta$ match those given by $q$, with $x_0$ replaced by an estimate.
+
+
 ## Minimal implementation
 
 In this section we describe a simple implementation in PyTorch, training on the MNIST dataset.
