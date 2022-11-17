@@ -159,7 +159,7 @@ $$
 \end{align}
 $$
 
-Here $D_{KL}$ is the Kullback-Leibler divergence, which describes the "distance" between a pair of distribuitions. Since it is always positive, we get a lower bound for the log-likelihood. We will also use our definitions for joint and conditional distributions
+Here $D_{KL}$ is the Kullback-Leibler divergence, which describes the "distance" between a pair of distribuitions. Since it is always positive, we get a lower bound for the log-likelihood.
 
 $$
 \begin{align}
@@ -185,7 +185,7 @@ With these definitions in mind, we can continue deriving a lower bound
 
 $$
 \begin{align}
-\log p(x) &\geq E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p(x_T)\prod_{t=1}^T p_\theta(x_{t-1} \mid x_t)}{q(x_T \mid x_0) \prod_{t=2}^T q(x_{t-1} \mid x_0, x_t)} \right] \\
+\log p(x) &\geq E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p(x_T) \prod_{t=1}^T p_\theta(x_{t-1} \mid x_t)}{q(x_T \mid x_0) \prod_{t=2}^T q(x_{t-1} \mid x_0, x_t)} \right] \\
 &= E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p(x_T)}{q(x_T \mid x_0)} \right] + E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log p_\theta(x_0 \mid x_1) \right] + \sum_{t=2}^T E_{q(x_1,\dotsc,x_T \mid x_0)} \left[ \log \frac{p_\theta(x_{t-1} \mid x_t)}{q(x_{t-1} \mid x_t, x_0)} \right] \\
 &= -D_{KL} (q(x_T \mid x_0) || p(x_T))  + E_{q(x_1 \mid x_0)} \left[ \log p_\theta(x_0 \mid x_1) \right] - \sum_{t=2}^T E_{q(x_t \mid x_0)} \left[ D_{KL} (q(x_{t-1} \mid x_t, x_0) || p_\theta(x_{t-1} \mid x_t)) \right]
 \end{align}
