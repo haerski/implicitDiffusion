@@ -243,7 +243,7 @@ $$
 x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_T \text{ for all }t = 1,\dotsc,T-1
 $$
 
-In other words, all latents are generated using the **same** noise used to generate $x_T$.
+In other words, all latents are generated using the **same** noise used to generate $x_T$. This critical observation will allow the fast sampling scheme by skipping some steps.
 
 The way the forward process is written looks a lot like a backwards process. A more "forward looking" process $q(x_t \mid x_0, x_{t-1})$ is easily computed by solving equation (3) for $x_t$. The distribution $q(x_t \mid x_0, x_{t-1})$ is a Dirac delta measure centered at
 
@@ -289,19 +289,23 @@ $$
 
 This is where we must part ways with Dirac delta probability densities for a moment, since the above values are not well defined. We will temporarily adopt the generalized version of the DDIM model, where the steps $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ are **Gaussian**, with nonzero variance $\sigma_t^2$ at each timestep. We recall that the Dirac deltas and the implicit model are recovered by letting $\sigma_t \to 0$ for all $t$.
 
-The main points still hold in this generalized setting. Most importantly, the KL divergence between $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ is minimized when $p_\theta(x_{t-1} \mid x_t)$ is a Gaussian, with "correct" mean
+The main points still hold in this generalized setting. Most importantly, the KL divergence between $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ is minimized when $p_\theta(x_{t-1} \mid x_t)$ are similar enough. Since the $q$ are now Gaussian, with
 
 $$
-\begin{align*}
-E_{p_\theta(x_{t-1} \mid x_t)}[x_{t-1}] &= \sqrt{\alpha_{t-1}} f_\theta(x_t) + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}} \\
-&= \sqrt{\alpha_{t-1}} \frac{1}{\sqrt{\alpha_t}}(x_t - \sqrt{1-\alpha_t}\epsilon_\theta(x_t)) + \sqrt{1-\alpha_{t-1}} \epsilon_\theta(x_t)
-\end{align*}
+q(x_{t-1} \mid x_0, x_t) \sim \mathcal{N}(\sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}-\sigma_t} \epsilon_t, \sigma_t^2)
 $$
 
-and variance $\sigma_t^2$. With this, because KL divergences between Gaussians are nice, we get a closed form formula for the expression in equation (4), namely
+we want to choose $p(x_{t-1} \mid x_t)$ to also be Gaussian, with the same variance, and mean using a predicted $x_0$. We thus want to choose
 
 $$
--\sum_{t=1}^T \frac{1}{2\sigma_t^2} E_{q(x_0,x_t)}\left[ \|x_0 - f_\theta(x_t) \|_2^2 \right]
+p_\theta(x_{t-1} \mid x_t) = q_\theta(x_{t-1} \mid f_\theta(x_t), x_t) = \mathcal{N}(\sqrt{\alpha_{t-1}} f_\theta(x_t) + \sqrt{1-\alpha_{t-1} - \sigma_t^2} \epsilon(x_t), \sigma_t^2 I),
+$$
+
+where again $f_\theta(x_t)$ and $\epsilon_\theta(x_t)$ satisfy the relation $x_t = \sqrt{\alpha_t} f_\theta(x_t) + \sqrt{1-\alpha_t} \epsilon_\theta(x_t)$.
+With this, because KL divergences between Gaussians are nice, we get a closed form formula for the expression in equation (4), namely
+
+$$
+-\frac{1}{2\sigma_1^2} E_{q(x_1 \mid x_0)} \left[ \| x_0 - f_\theta(x_1) \|^2 \right] - \sum_{t=2}^T \frac{1}{2\sigma_t^2} \left( \sqrt{\alpha_{t-1}} - \frac{\sqrt{1-\alpha_{t-1}-\sigma_t^2} \sqrt{\alpha_t}}{\sqrt{1-\alpha_t}} \right)^2 E_{q(x_t \mid x_0)}\left[ \| x_0 - f_\theta(x_t) \|^2 \right] + C
 $$
 
 Maximizing the quantity above means minimizing the difference between the real sample $x_0$ and our prediction $f_\theta(x_t)$. We also see why Dirac deltas fail here, as the above expression approaches infinity as $\sigma \to 0$, unless our model $f_\theta(x_t)$ is perfect.
@@ -309,10 +313,11 @@ Maximizing the quantity above means minimizing the difference between the real s
 We can also plug in the relation $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$ to rewrite the above lower bound as
 
 $$
--\sum_{t=1}^T \frac{1}{2d\sigma^2_t\alpha_t}E \left[\|\epsilon_t - \epsilon_\theta(x_t)\|_2^2 \right],
+-\frac{1}{2\sigma_1^2} \frac{1-\alpha_1}{\alpha_1} E_{\epsilon_t} \left[ \| \epsilon_t - \epsilon_\theta(x_1) \|^2 \right] - \sum_{t=2}^T \frac{1}{2\sigma_t^2} \frac{(\sqrt{1-\alpha_t}\sqrt{\alpha_{t-1}}-\sqrt{\alpha_t}\sqrt{1-\alpha_{t-1}-\sigma_t^2})^2}{\alpha_t} E_{\epsilon_t}\left[ \| \epsilon_t - \epsilon_\theta(x_t) \|^2 \right] + C
 $$
 
-where the expectation is taken over the distributions $x_0 \sim q(x_0), \epsilon_t \sim \mathcal{N}(0,I)$, and where $x_t = \sqrt{\alpha_t}x_0 + \sqrt{1-\alpha_t} \epsilon_t$, and $d$ is a constant. Similarly, maximizing this objective means minimizing the difference between the true noise $\epsilon_t$ and our prediction $\epsilon_\theta(x_t)$.
+where the expectation is taken over $\epsilon_t \sim \mathcal{N}(0,I)$, and where $x_t = \sqrt{\alpha_t}x_0 + \sqrt{1-\alpha_t} \epsilon_t$. Similarly, maximizing this objective means minimizing the difference between the true noise $\epsilon_t$ and our prediction $\epsilon_\theta(x_t)$.
+Again, maximizing this means minimizing the distance between our prediction $\epsilon_\theta(x_t)$ and the true noise $x_t$.
 
 The original DDPM paper suggests a simplified objective, of the form
 
@@ -320,7 +325,9 @@ $$
 -\sum_{t=1}^T E \left[\|\epsilon_t - \epsilon_\theta(x_t)\|_2^2 \right],
 $$
 
-which just gets rid of the weights in front of the expectation. This has been empirically shown to produce samples of better quality. The lack of $\sigma_t$ in the simplified form means that we can use this objective function to train the implicit model as well.
+which just gets rid of the weights in front of the expectation. This has been empirically shown to produce samples of better quality. One explanation could be that since the weights are decreasing, the original objective focuses training to low timesteps, where noise is small and predictions are supposedly good. The removal of the weights in the simplified form train each timestep equally. Furthermore, the DDIM paper notes that if the model parameters $\theta$ are not shared across different $t$, the weights don't even matter. The lack of $\sigma_t$ in the simplified form means that we can use this objective function to train the implicit model as well.
+
+The above objective is for a single training image $x_0$. The final goal is to maximize expectation of the lower bound of the log-likelihood over the data distribution $q(x_0)$.
 
 ### Fast sampling
 
@@ -340,7 +347,11 @@ $$
 
 Thus samples are produced by generating $p(x_T)$, and going backwards to $x_0$ following transitions described by $p(x_{\tau_{i-1}} \mid x_{\tau_i})$.
 
-Similarly to the above, we can find a lower bound for the log-likelihood, which involves minimizing the KL-divergence between the $q(x_{\tau_{i-1}} \mid x_0, x_{\tau_i})$ and $p_\theta(x_{\tau_{i-1}} \mid x_{\tau_i})$. This is achieved when the transitions given by $p_\theta$ match those given by $q$, with $x_0$ replaced by an estimate.
+Similarly to the above, we can find a lower bound for the log-likelihood, which involves minimizing the KL-divergence between the $q(x_{\tau_{i-1}} \mid x_0, x_{\tau_i})$ and $p_\theta(x_{\tau_{i-1}} \mid x_{\tau_i})$. This is achieved when the transitions given by $p_\theta$ match those given by $q$, with $x_0$ replaced by an estimate. Since under the DDIM conditioned on $x_0$, the noise $\epsilon_t$ used to generate each $x_t$ is the same, the transitions are given by
+
+$$
+x_{\tau_{i-1}} = \sqrt{\alpha_{\tau_{i-1}}} f_\theta(x_{\tau_i}) + \sqrt{1-\alpha_{\tau_{i-1}}} \epsilon_\theta(x_{\tau_i})
+$$
 
 
 ## Minimal implementation
