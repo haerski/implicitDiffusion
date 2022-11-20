@@ -87,7 +87,7 @@ To get $x_{t-1}$ from $x_t$, we proceed as follows:
 2. Estimate $x_0$ by solving equation (1) for $x_0$ and using $\epsilon_\theta^{(t)}(x_t)$ in place of $\epsilon_t$. The paper calls this estimate $f_\theta^{(t)}(x_t)$, and is defined as 
 
 $$
-f^{(t)}_\theta(x_t) = (x_t - \sqrt{1-\alpha_t} \epsilon_{\theta}^{(t)}(x_t)) / \sqrt{\alpha_t}
+f_\theta^{(t)}(x_t) = (x_t - \sqrt{1-\alpha_t} \epsilon_\theta^{(t)}(x_t)) / \sqrt{\alpha_t}
 $$
 
 3. Compute $x_{t-1}$ from equation (2) using estimates for $\epsilon_t$ and $x_0$ computed in steps 1 and 2. In symbols 
@@ -104,14 +104,14 @@ Due to the dependence on $x_0$ of the denoising proceduce, we may go from $x_T$ 
 
 For completeness, we describe the steps of the accelerated sampling procedure. Suppose we have a subset $\tau_0 < \tau_1 < \dotsc < \tau_s$, where $\tau_0 = 0$ and $\tau_s = T$. Then, starting from $x_T$, we get $x_0$ by the following procedure
 1. Set $t = \tau_i$
-1. Use the machine learning model to produce $\epsilon_\theta^{(t)}(x_t)$.
-2. Estimate $x_0$ by
+2. Use the machine learning model to produce $\epsilon_\theta^{(t)}(x_t)$.
+3. Estimate $x_0$ by
 
 $$
-f^{(t)}_\theta(x_t) = (x_t - \sqrt{1-\alpha_t} \epsilon_{\theta}^{(t)}(x_t)) / (\sqrt{\alpha_t})
+f_\theta^{(t)}(x_t) = (x_t - \sqrt{1-\alpha_t} \epsilon_\theta^{(t)}(x_t)) / (\sqrt{\alpha_t})
 $$
 
-3. Compute $x_{\tau_{i-1}}$ from equation (2) using estimates for $\epsilon_t$ and $x_0$ computed in steps 1 and 2. In symbols 
+4. Compute $x_{\tau_{i-1}}$ from equation (2) using estimates for $\epsilon_t$ and $x_0$ computed in steps 1 and 2. In symbols 
 
 $$
 x_{\tau_{i-1}} = \sqrt{\alpha_{\tau_{i-1}}} f_\theta^{(t)}(x_t) + \sqrt{1-\alpha_{\tau_{i-1}}} \epsilon_\theta^{(t)}(x_t)
@@ -237,13 +237,22 @@ $$
 
 We can thus interpret the $t$th latent variable as a combination $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$, where $\epsilon_t$ is a standard Gaussian. This represent the $t$th noisy image as a combination of the unnoised image $x_0$ and a noise term $\epsilon$, where the square roots ensure that the length scales stay the same throughout the noising process. The parameters $\alpha_t$ are chosen to be decreasing from 1 to almost 0, so that the noisiness of the sequence $x_0, x_1,\dotsc$ increases.
 
+With this interpretation, conditioning on **both** $x_0$ and $x_T$, the whole sequence $x_1,\dotsc,x_{T-1}$ would just be
+
+$$
+x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_T \text{ for all }t = 1,\dotsc,T-1
+$$
+
+In other words, all latents are generated using the **same** noise used to generate $x_T$.
+
 The way the forward process is written looks a lot like a backwards process. A more "forward looking" process $q(x_t \mid x_0, x_{t-1})$ is easily computed by solving equation (3) for $x_t$. The distribution $q(x_t \mid x_0, x_{t-1})$ is a Dirac delta measure centered at
 
 $$
 x_t = \frac{\sqrt{1-\alpha_t}}{\sqrt{1-\alpha_{t-1}}}\left(x_{t-1} - \sqrt{\alpha_{t-1}}x_0 \right) + \sqrt{\alpha_t} x_0
 $$
 
-This form shows us that the noising procedure is *non-Markovian*, as $x_t$ is not independent of $x_0$ conditioned on $x_{t-1}$. This is in contrast to the DDPM model, where the noising procedure is defined to be a Markov process. Despite this, the marginals $q(x_t \mid x_0)$, and consequently the training objective, are exactly the same for both DDPM and DDIM.
+This can be interpreted as $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1 - \alpha_t} \epsilon_{t-1}$, i.e. we reuse the noise of the previous step in the next step. This makes sense, since the noise **at all steps** should be the same for any given sequence $x_1,\dotsc,x_T$, conditioned on $x_0$.
+This form also shows us that the noising procedure is *non-Markovian*, as $x_t$ is not independent of $x_0$ conditioned on $x_{t-1}$. This is in contrast to the DDPM model, where the noising procedure is defined to be a Markov process. Despite this, the marginals $q(x_t \mid x_0)$, and consequently the training objective, are exactly the same for both DDPM and DDIM.
 
 ### Reversing the noising procedure
 
@@ -252,7 +261,7 @@ Ideally, we would like to denoise by knowing the distribution $q(x_{t-1} \mid x_
 Then, the distributions $p_\theta(x_{t-1} \mid x_t)$ that maximize the log-likelihood are Dirac deltas centered at
 
 $$
-x_{t-1} = \sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}}.
+x_{t-1} = \sqrt{\alpha_{t-1}} f_\theta(x_t) + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}}.
 $$
 
 We note that if we have $x_0$ and $x_t$, we can also compute the noise used to generate $x_t$ from $x_0$ via the formula $x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon_t$. Thus, alternatively, we could train a model to learn $\epsilon_t$ from $x_t$ alone, which would be equivalent to training a model to learn $x_0$ from $x_t$ alone. If we let $\epsilon_\theta(x_t)$ be the prediction of $\epsilon_t$, we have a prediction for $x_0$ of the form
@@ -261,7 +270,12 @@ $$
 f_\theta(x_t) = \frac{1}{\sqrt{\alpha_t}}(x_t - \sqrt{1-\alpha_t}\epsilon_\theta(x_t))
 $$
 
-Plugging this into the previous formula gives the location for the Dirac delta $p_\theta(x_{t-1} \mid x_t)$.
+Plugging this into the previous formula gives the location for the Dirac delta $p_\theta(x_{t-1} \mid x_t)$, namely
+
+$$
+x_{t-1} = \sqrt{\alpha_{t-1}} \frac{1}{\sqrt{\alpha_t}}(x_t - \sqrt{1-\alpha_t}\epsilon_\theta(x_t)) + \sqrt{1-\alpha_{t-1}} \epsilon_\theta(x_t)
+$$
+
 Empirically it has been shown that predicting the noise $\epsilon_t$ results in better performance than predicting $x_0$. One reason may be that noise is more "normally" behaved than images.
 
 ### Model training objective
@@ -278,7 +292,10 @@ This is where we must part ways with Dirac delta probability densities for a mom
 The main points still hold in this generalized setting. Most importantly, the KL divergence between $p_\theta(x_{t-1} \mid x_t)$ and $q(x_{t-1} \mid x_0, x_t)$ is minimized when $p_\theta(x_{t-1} \mid x_t)$ is a Gaussian, with "correct" mean
 
 $$
-E_{p_\theta(x_{t-1} \mid x_t)}[x_{t-1}] = \sqrt{\alpha_{t-1}} x_0 + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}}
+\begin{align*}
+E_{p_\theta(x_{t-1} \mid x_t)}[x_{t-1}] &= \sqrt{\alpha_{t-1}} f_\theta(x_t) + \sqrt{1-\alpha_{t-1}}\frac{x_t - \sqrt{\alpha_t} f_\theta(x_t)}{\sqrt{1-\alpha_t}} \\
+&= \sqrt{\alpha_{t-1}} \frac{1}{\sqrt{\alpha_t}}(x_t - \sqrt{1-\alpha_t}\epsilon_\theta(x_t)) + \sqrt{1-\alpha_{t-1}} \epsilon_\theta(x_t)
+\end{align*}
 $$
 
 and variance $\sigma_t^2$. With this, because KL divergences between Gaussians are nice, we get a closed form formula for the expression in equation (4), namely
